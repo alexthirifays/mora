@@ -14,6 +14,7 @@ import uuid
 
 import flask
 
+from . import auth
 from . import cli
 from . import lora
 from . import util
@@ -44,27 +45,33 @@ def send_styles(path):
 
 @app.route('/service/user/<user>/login', methods=['POST'])
 def login(user):
-    r = lora.login(user, flask.request.get_json()['password'])
+    r = auth.login(user, flask.request.get_json()['password'])
 
     if r:
-        return flask.jsonify(r)
+        return flask.jsonify(r), 200, {
+            "cache-control": "no-cache",
+        }
     else:
-        return '', 401
+        return '', 401, {
+            "cache-control": "no-cache",
+        }
 
 
 @app.route('/service/user/<user>/logout', methods=['POST'])
 def logout(user):
     return flask.jsonify(
-        lora.logout(user, flask.request.headers['X-AUTH-TOKEN'])
+        auth.logout(user, flask.request.headers['X-AUTH-TOKEN'])
     )
 
 
 @app.route('/acl/', methods=['POST', 'GET'])
+@auth.requires_auth
 def acl():
     return flask.jsonify([])
 
 
 @app.route('/o/')
+@auth.requires_auth
 def list_organisations():
     orgs = lora.organisation(uuid=lora.organisation(bvn='%'))
 
@@ -99,6 +106,7 @@ def list_organisations():
 
 
 @app.route('/o/<uuid:orgid>/org-unit', methods=['POST'])
+@auth.requires_auth
 def create_organisation_unit(orgid):
     req = flask.request.get_json()
     org_unit = writing.create_org_unit(req)
@@ -168,6 +176,7 @@ def rename_org_unit(orgid, unitid):
     '/o/<uuid:orgid>/org-unit/<uuid:unitid>/role-types/location/<uuid:roleid>',
     methods=['POST'],
 )
+@auth.requires_auth
 def update_organisation_unit_location(orgid, unitid, roleid=None):
     req = flask.request.get_json()
     roletype = req.get('role-type')
@@ -246,6 +255,7 @@ def update_organisation_unit_location(orgid, unitid, roleid=None):
 
 
 @app.route('/o/<uuid:orgid>/full-hierarchy')
+@auth.requires_auth
 def full_hierarchy(orgid):
     args = flask.request.args
     treeType = args.get('treeType', None)
@@ -314,6 +324,7 @@ def full_hierarchy(orgid):
 
 @app.route('/o/<uuid:orgid>/org-unit/')
 @app.route('/o/<uuid:orgid>/org-unit/<uuid:unitid>/')
+@auth.requires_auth
 def get_orgunit(orgid, unitid=None):
     query = flask.request.args.get('query', None)
     if query:
@@ -377,6 +388,7 @@ def get_orgunit(orgid, unitid=None):
 
 
 @app.route('/o/<uuid:orgid>/org-unit/<uuid:unitid>/role-types/<role>/')
+@auth.requires_auth
 def get_role(orgid, unitid, role):
     if role not in ['contact-channel', 'location']:
         return flask.jsonify([]), 400
@@ -445,6 +457,7 @@ def get_role(orgid, unitid, role):
 
 # This one is used when creating new "Enheder"
 @app.route('/org-unit/type')
+@auth.requires_auth
 def list_classes():
     # TODO: we need to somehow restrict the available classes to
     # sensible options; a classification hierarchy, perhaps, or only
@@ -468,6 +481,7 @@ def list_classes():
 
 @app.route('/addressws/geographical-location')
 @app.route('/addressws/geographical-location/<uuid:orgid>')
+@auth.requires_auth
 def get_geographical_addresses(orgid=None):
     # example output from runWithMocks:
     # [{
@@ -525,6 +539,7 @@ def get_geographical_addresses(orgid=None):
 
 
 @app.route('/role-types/contact/facets/properties/classes/')
+@auth.requires_auth
 def get_contact_facet_properties_classes():
     # This yields three options in the original Mock test:
     # internal-only, external and unlisted. (In Danish: “Må vises
@@ -539,6 +554,7 @@ def get_contact_facet_properties_classes():
 
 
 @app.route('/role-types/contact/facets/type/classes/')
+@auth.requires_auth
 def get_contact_facet_types_classes():
     key = flask.request.args.get('facetKey')
     assert key == 'Contact_channel_location', 'unknown key: ' + key
